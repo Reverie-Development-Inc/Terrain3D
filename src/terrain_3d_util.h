@@ -229,33 +229,33 @@ inline Vector3 smoothstep(const real_t p_low, const real_t p_high, const Vector3
 inline float as_float(const uint32_t p_value) { return *(float *)&p_value; }
 inline uint32_t as_uint(const float p_value) { return *(uint32_t *)&p_value; }
 
-inline uint8_t get_base(const uint32_t p_pixel) { return p_pixel >> 27 & 0x1F; }
+inline uint8_t get_base(const uint32_t p_pixel) { return p_pixel >> 26 & 0x3F; }
 inline uint8_t get_base(const float p_pixel) { return get_base(as_uint(p_pixel)); }
-inline uint32_t enc_base(const uint8_t p_base) { return (p_base & 0x1F) << 27; }
+inline uint32_t enc_base(const uint8_t p_base) { return (p_base & 0x3F) << 26; }
 inline uint32_t gd_get_base(const uint32_t p_pixel) { return get_base(p_pixel); }
 inline uint32_t gd_enc_base(const uint32_t p_base) { return enc_base(p_base); }
 
-inline uint8_t get_overlay(const uint32_t p_pixel) { return p_pixel >> 22 & 0x1F; }
+inline uint8_t get_overlay(const uint32_t p_pixel) { return p_pixel >> 20 & 0x3F; }
 inline uint8_t get_overlay(const float p_pixel) { return get_overlay(as_uint(p_pixel)); }
-inline uint32_t enc_overlay(const uint8_t p_over) { return (p_over & 0x1F) << 22; }
+inline uint32_t enc_overlay(const uint8_t p_over) { return (p_over & 0x3F) << 20; }
 inline uint32_t gd_get_overlay(const uint32_t p_pixel) { return get_overlay(p_pixel); }
 inline uint32_t gd_enc_overlay(const uint32_t p_over) { return enc_overlay(p_over); }
 
-inline uint8_t get_blend(const uint32_t p_pixel) { return p_pixel >> 14 & 0xFF; }
+inline uint8_t get_blend(const uint32_t p_pixel) { return p_pixel >> 12 & 0xFF; }
 inline uint8_t get_blend(const float p_pixel) { return get_blend(as_uint(p_pixel)); }
-inline uint32_t enc_blend(const uint8_t p_blend) { return (p_blend & 0xFF) << 14; }
+inline uint32_t enc_blend(const uint8_t p_blend) { return (p_blend & 0xFF) << 12; }
 inline uint32_t gd_get_blend(const uint32_t p_pixel) { return get_blend(p_pixel); }
 inline uint32_t gd_enc_blend(const uint32_t p_blend) { return enc_blend(p_blend); }
 
-inline uint8_t get_uv_rotation(const uint32_t p_pixel) { return p_pixel >> 10 & 0xF; }
+inline uint8_t get_uv_rotation(const uint32_t p_pixel) { return p_pixel >> 8 & 0xF; }
 inline uint8_t get_uv_rotation(const float p_pixel) { return get_uv_rotation(as_uint(p_pixel)); }
-inline uint32_t enc_uv_rotation(const uint8_t p_rotation) { return (p_rotation & 0xF) << 10; }
+inline uint32_t enc_uv_rotation(const uint8_t p_rotation) { return (p_rotation & 0xF) << 8; }
 inline uint32_t gd_get_uv_rotation(const uint32_t p_pixel) { return get_uv_rotation(p_pixel); }
 inline uint32_t gd_enc_uv_rotation(const uint32_t p_rotation) { return enc_uv_rotation(p_rotation); }
 
-inline uint8_t get_uv_scale(const uint32_t p_pixel) { return p_pixel >> 7 & 0x7; }
+inline uint8_t get_uv_scale(const uint32_t p_pixel) { return p_pixel >> 5 & 0x7; }
 inline uint8_t get_uv_scale(const float p_pixel) { return get_uv_scale(as_uint(p_pixel)); }
-inline uint32_t enc_uv_scale(const uint8_t p_scale) { return (p_scale & 0x7) << 7; }
+inline uint32_t enc_uv_scale(const uint8_t p_scale) { return (p_scale & 0x7) << 5; }
 inline uint32_t gd_get_uv_scale(const uint32_t p_pixel) { return get_uv_scale(p_pixel); }
 inline uint32_t gd_enc_uv_scale(const uint32_t p_scale) { return enc_uv_scale(p_scale); }
 
