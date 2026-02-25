@@ -91,7 +91,7 @@ group_uniforms;
 //INSERT: DEBUG_CONTROL_TEXTURE
 	// Show control map texture selection
 	{
-		vec3 __t_colors[32];
+		vec3 __t_colors[64];
 		__t_colors[0] = vec3(1.0, 0.0, 0.0);
 		__t_colors[1] = vec3(0.0, 1.0, 0.0);
 		__t_colors[2] = vec3(0.0, 0.0, 1.0);
@@ -124,11 +124,44 @@ group_uniforms;
 		__t_colors[29] = vec3(0.1);
 		__t_colors[30] = vec3(0.05);
 		__t_colors[31] = vec3(0.0125);
+		// Extended colors for 64-texture support
+		__t_colors[32] = vec3(0.8, 0.4, 0.0);
+		__t_colors[33] = vec3(0.0, 0.4, 0.8);
+		__t_colors[34] = vec3(0.4, 0.8, 0.0);
+		__t_colors[35] = vec3(0.8, 0.0, 0.4);
+		__t_colors[36] = vec3(0.4, 0.0, 0.8);
+		__t_colors[37] = vec3(0.0, 0.8, 0.4);
+		__t_colors[38] = vec3(0.6, 0.3, 0.1);
+		__t_colors[39] = vec3(0.1, 0.3, 0.6);
+		__t_colors[40] = vec3(0.3, 0.6, 0.1);
+		__t_colors[41] = vec3(0.6, 0.1, 0.3);
+		__t_colors[42] = vec3(0.3, 0.1, 0.6);
+		__t_colors[43] = vec3(0.1, 0.6, 0.3);
+		__t_colors[44] = vec3(0.9, 0.5, 0.2);
+		__t_colors[45] = vec3(0.2, 0.5, 0.9);
+		__t_colors[46] = vec3(0.5, 0.9, 0.2);
+		__t_colors[47] = vec3(0.9, 0.2, 0.5);
+		__t_colors[48] = vec3(0.7, 0.7, 0.3);
+		__t_colors[49] = vec3(0.3, 0.7, 0.7);
+		__t_colors[50] = vec3(0.7, 0.3, 0.7);
+		__t_colors[51] = vec3(0.4, 0.4, 0.2);
+		__t_colors[52] = vec3(0.2, 0.4, 0.4);
+		__t_colors[53] = vec3(0.4, 0.2, 0.4);
+		__t_colors[54] = vec3(0.9, 0.7, 0.1);
+		__t_colors[55] = vec3(0.1, 0.7, 0.9);
+		__t_colors[56] = vec3(0.7, 0.1, 0.9);
+		__t_colors[57] = vec3(0.5, 0.3, 0.0);
+		__t_colors[58] = vec3(0.0, 0.3, 0.5);
+		__t_colors[59] = vec3(0.3, 0.5, 0.0);
+		__t_colors[60] = vec3(0.85, 0.85, 0.0);
+		__t_colors[61] = vec3(0.0, 0.85, 0.85);
+		__t_colors[62] = vec3(0.85, 0.0, 0.85);
+		__t_colors[63] = vec3(0.6, 0.6, 0.6);
 		ivec3 __uv = get_index_coord(floor(uv));
 		uint __control = floatBitsToUint(texelFetch(_control_maps, __uv, 0).r);
-		vec3 __ctrl_base = __t_colors[int(__control >>27u & 0x1Fu)];
-		vec3 __ctrl_over = __t_colors[int(__control >>22u & 0x1Fu)];
-		float __blend = float(__control >>14u & 0xFFu) * 0.003921568627450; // 1.0/255.0
+		vec3 __ctrl_base = __t_colors[int(__control >> 26u & 0x3Fu)];
+		vec3 __ctrl_over = __t_colors[int(__control >> 20u & 0x3Fu)];
+		float __blend = float(__control >> 12u & 0xFFu) * 0.003921568627450; // 1.0/255.0
 		float base_over = (length(fract(uv) - 0.5) < fma(__blend, 0.45, 0.1) ? 1.0 : 0.0);
 		ALBEDO = mix(__ctrl_base, __ctrl_over, base_over);	
 		ROUGHNESS = 1.0;
@@ -142,7 +175,7 @@ group_uniforms;
 	{
 		ivec3 __uv = get_index_coord(floor(uv));
         uint __control = floatBitsToUint(texelFetch(_control_maps, __uv, 0).r);
-        float __ctrl_blend = float(__control >>14u & 0xFFu) * 0.003921568627450; // 1.0/255.0
+        float __ctrl_blend = float(__control >>12u & 0xFFu) * 0.003921568627450; // 1.0/255.0
 		float __is_auto = 0.;
 		#ifdef AUTO_SHADER
 			__is_auto = float( bool(__control & 0x1u) || __uv.z < 0 );
@@ -159,7 +192,7 @@ group_uniforms;
 	{
 		ivec3 __auv = get_index_coord(floor(uv));
 		uint __a_control = floatBitsToUint(texelFetch(_control_maps, __auv, 0)).r;
-		uint __angle = (__a_control >>10u & 0xFu);
+		uint __angle = (__a_control >>8u & 0xFu);
 		vec3 __a_colors[16] = {
 			vec3(1., .2, .0), vec3(.8, 0., .2), vec3(.6, .0, .4), vec3(.4, .0, .6),
 			vec3(.2, 0., .8), vec3(.1, .1, .8), vec3(0., .2, .8), vec3(0., .4, .6),
@@ -178,7 +211,7 @@ group_uniforms;
 	{
 		ivec3 __suv = get_index_coord(floor(uv));
 		uint __s_control = floatBitsToUint(texelFetch(_control_maps, __suv, 0)).r;
-		uint __scale = (__s_control >>7u & 0x7u);
+		uint __scale = (__s_control >>5u & 0x7u);
 		vec3 __s_colors[8] = {
 			vec3(.5, .5, .5), vec3(.675, .25, .375), vec3(.75, .125, .25), vec3(.875, .0, .125), vec3(1., 0., 0.),
 			vec3(0., 0., 1.), vec3(.0, .166, .833), vec3(.166, .333, .666)

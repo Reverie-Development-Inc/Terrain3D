@@ -7,8 +7,8 @@ R"(
 group_uniforms shader_uniforms.auto_shader;
 uniform float auto_slope : hint_range(0, 10) = 1.0;
 uniform float auto_height_reduction : hint_range(0, 1) = 0.1;
-uniform int auto_base_texture : hint_range(0, 31) = 0;
-uniform int auto_overlay_texture : hint_range(0, 31) = 1;
+uniform int auto_base_texture : hint_range(0, 63) = 0;
+uniform int auto_overlay_texture : hint_range(0, 63) = 1;
 group_uniforms;
 
 //INSERT: AUTO_SHADER
@@ -20,9 +20,9 @@ group_uniforms;
 		uvec4 is_auto = (control & uvec4(0x1u)) | 
 			uvec4(lessThan(ivec4(index[0].z, index[1].z, index[2].z, index[3].z), ivec4(0)));
 		uint u_auto = 
-			((uint(auto_base_texture) & 0x1Fu) << 27u) |
-			((uint(auto_overlay_texture) & 0x1Fu) << 22u) |
-			((uint(fma(auto_blend, 255.0 , 0.5)) & 0xFFu) << 14u);
+			((uint(auto_base_texture) & 0x3Fu) << 26u) |
+			((uint(auto_overlay_texture) & 0x3Fu) << 20u) |
+			((uint(fma(auto_blend, 255.0 , 0.5)) & 0xFFu) << 12u);
 		control = control * (1u - is_auto) + u_auto * is_auto;
 	}
 
