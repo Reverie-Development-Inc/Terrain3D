@@ -290,8 +290,8 @@ inline uint32_t Terrain3DData::get_control(const Vector3 &p_global_position) con
 
 inline void Terrain3DData::set_control_base_id(const Vector3 &p_global_position, const uint8_t p_base) {
 	uint32_t control = get_control(p_global_position);
-	uint8_t base = CLAMP(p_base, uint8_t(0), uint8_t(31));
-	set_control(p_global_position, (control & ~(0x1F << 27)) | enc_base(base));
+	uint8_t base = CLAMP(p_base, uint8_t(0), uint8_t(63));
+	set_control(p_global_position, (control & ~(0x3F << 26)) | enc_base(base));
 }
 
 inline uint32_t Terrain3DData::get_control_base_id(const Vector3 &p_global_position) const {
@@ -301,8 +301,8 @@ inline uint32_t Terrain3DData::get_control_base_id(const Vector3 &p_global_posit
 
 inline void Terrain3DData::set_control_overlay_id(const Vector3 &p_global_position, const uint8_t p_overlay) {
 	uint32_t control = get_control(p_global_position);
-	uint8_t overlay = CLAMP(p_overlay, uint8_t(0), uint8_t(31));
-	set_control(p_global_position, (control & ~(0x1F << 22)) | enc_overlay(overlay));
+	uint8_t overlay = CLAMP(p_overlay, uint8_t(0), uint8_t(63));
+	set_control(p_global_position, (control & ~(0x3F << 20)) | enc_overlay(overlay));
 }
 
 inline uint32_t Terrain3DData::get_control_overlay_id(const Vector3 &p_global_position) const {
@@ -314,7 +314,7 @@ inline uint32_t Terrain3DData::get_control_overlay_id(const Vector3 &p_global_po
 inline void Terrain3DData::set_control_blend(const Vector3 &p_global_position, const real_t p_blend) {
 	uint32_t control = get_control(p_global_position);
 	uint8_t blend = uint8_t(CLAMP(Math::round(p_blend * 255.f), 0.f, 255.f));
-	set_control(p_global_position, (control & ~(0xFF << 14)) | enc_blend(blend));
+	set_control(p_global_position, (control & ~(0xFF << 12)) | enc_blend(blend));
 }
 
 inline real_t Terrain3DData::get_control_blend(const Vector3 &p_global_position) const {
@@ -326,7 +326,7 @@ inline real_t Terrain3DData::get_control_blend(const Vector3 &p_global_position)
 inline void Terrain3DData::set_control_angle(const Vector3 &p_global_position, const real_t p_angle) {
 	uint32_t control = get_control(p_global_position);
 	uint8_t uvrotation = uint8_t(CLAMP(Math::round(p_angle / 22.5f), 0.f, 15.f));
-	set_control(p_global_position, (control & ~(0xF << 10)) | enc_uv_rotation(uvrotation));
+	set_control(p_global_position, (control & ~(0xF << 8)) | enc_uv_rotation(uvrotation));
 }
 
 // returns angle in degrees
@@ -341,7 +341,7 @@ inline void Terrain3DData::set_control_scale(const Vector3 &p_global_position, c
 	uint32_t control = get_control(p_global_position);
 	std::array<uint32_t, 8> scale_align = { 5, 6, 7, 0, 1, 2, 3, 4 };
 	uint8_t uvscale = scale_align[uint8_t(CLAMP(Math::round((p_scale + 60.f) / 20.f), 0.f, 7.f))];
-	set_control(p_global_position, (control & ~(0x7 << 7)) | enc_uv_scale(uvscale));
+	set_control(p_global_position, (control & ~(0x7 << 5)) | enc_uv_scale(uvscale));
 }
 
 inline real_t Terrain3DData::get_control_scale(const Vector3 &p_global_position) const {

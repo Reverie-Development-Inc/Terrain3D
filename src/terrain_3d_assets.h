@@ -21,7 +21,7 @@ public: // Constants
 		TYPE_MESH,
 	};
 
-	static inline const int MAX_TEXTURES = 32;
+	static inline const int MAX_TEXTURES = 64;
 	static inline const int MAX_MESHES = 256;
 
 private:
