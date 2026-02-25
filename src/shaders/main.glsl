@@ -26,13 +26,13 @@ render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_sc
 #define TAU_16TH -0.392699081698724 // -TAU / 16.
 
 // Inline Functions
-#define DECODE_BLEND(control) float(control >>14u & 0xFFu) * DIV_255
+#define DECODE_BLEND(control) float(control >> 12u & 0xFFu) * DIV_255
 #define DECODE_AUTO(control) bool(control & 0x1u)
-#define DECODE_BASE(control) int(control >>27u & 0x1Fu)
-#define DECODE_OVER(control) int(control >>22u & 0x1Fu)
-#define DECODE_ANGLE(control) float(control >>10u & 0xFu) * TAU_16TH
+#define DECODE_BASE(control) int(control >> 26u & 0x3Fu)
+#define DECODE_OVER(control) int(control >> 20u & 0x3Fu)
+#define DECODE_ANGLE(control) float(control >>8u & 0xFu) * TAU_16TH
 // This math recreates the scale value directly rather than using an 8 float const array.
-#define DECODE_SCALE(control) (0.9 - float(((control >>7u & 0x7u) + 3u) % 8u + 1u) * 0.1)
+#define DECODE_SCALE(control) (0.9 - float(((control >>5u & 0x7u) + 3u) % 8u + 1u) * 0.1)
 #define DECODE_HOLE(control) bool(control >>2u & 0x1u)
 
 #if CURRENT_RENDERER == RENDERER_COMPATIBILITY
@@ -60,13 +60,13 @@ uniform int _region_map[1024];
 //INSERT: MAX_REGIONS_256
 //INSERT: MAX_REGIONS_512
 //INSERT: MAX_REGIONS_1024
-uniform float _texture_normal_depth_array[32];
-uniform float _texture_ao_strength_array[32];
-uniform float _texture_ao_affect_array[32];
-uniform float _texture_roughness_mod_array[32];
-uniform float _texture_uv_scale_array[32];
-uniform vec2 _texture_detile_array[32];
-uniform vec4 _texture_color_array[32];
+uniform float _texture_normal_depth_array[64];
+uniform float _texture_ao_strength_array[64];
+uniform float _texture_ao_affect_array[64];
+uniform float _texture_roughness_mod_array[64];
+uniform float _texture_uv_scale_array[64];
+uniform vec2 _texture_detile_array[64];
+uniform vec4 _texture_color_array[64];
 uniform highp sampler2DArray _height_maps : repeat_disable;
 uniform highp sampler2DArray _control_maps : repeat_disable;
 //INSERT: TEXTURE_SAMPLERS_LINEAR_ANISOTROPIC
@@ -541,8 +541,8 @@ void fragment() {
 	// Texture weights
 	// Vectorised Deocode of all texture IDs, then swizzle to per index mapping.
 	// Passed to accumulate_material to avoid repeated decoding.
-	ivec4 t_id[2] = {ivec4(control >> uvec4(27u) & uvec4(0x1Fu)),
-		ivec4(control >> uvec4(22u) & uvec4(0x1Fu))};
+	ivec4 t_id[2] = {ivec4(control >> uvec4(26u) & uvec4(0x3Fu)),
+		ivec4(control >> uvec4(20u) & uvec4(0x3Fu))};
 	ivec2 texture_ids[4] = ivec2[4](
 		ivec2(t_id[0].x, t_id[1].x),
 		ivec2(t_id[0].y, t_id[1].y),
@@ -550,7 +550,7 @@ void fragment() {
 		ivec2(t_id[0].w, t_id[1].w));
 
 	// uninterpolated weights.
-	vec4 weights_id_1 = vec4(control >> uvec4(14u) & uvec4(0xFFu)) * DIV_255;
+	vec4 weights_id_1 = vec4(control >> uvec4(12u) & uvec4(0xFFu)) * DIV_255;
 	vec4 weights_id_0 = 1.0 - weights_id_1;
 	vec2 t_weights[4] = vec2[4](
 				vec2(weights_id_0[0], weights_id_1[0]),
