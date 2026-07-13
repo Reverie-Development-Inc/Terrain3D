@@ -910,7 +910,7 @@ void Terrain3DData::import_images(const TypedArray<Image> &p_images, const Vecto
 			for (int y = 0; y < img->get_height(); y++) {
 				for (int x = 0; x < img->get_width(); x++) {
 					Color clr = img->get_pixel(x, y);
-					if (std::isnormal(clr.r)) {
+					if (std::isfinite(clr.r)) {
 						clr.r = (clr.r * p_scale) + p_offset;
 					} else {
 						clr.r = p_offset;
