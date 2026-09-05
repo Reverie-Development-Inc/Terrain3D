@@ -27,7 +27,7 @@
 				Dumps information about the data in the region, including instance IDs, counts, and data pointers.
 			</description>
 		</method>
-		<method name="duplicate">
+		<method name="duplicate_region">
 			<return type="Terrain3DRegion" />
 			<param index="0" name="deep" type="bool" default="false" />
 			<description>

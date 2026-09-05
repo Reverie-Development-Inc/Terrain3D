@@ -257,7 +257,7 @@ public partial class Terrain3DRegion : Resource
 		/// <summary>
 		/// Cached name for the 'duplicate' member.
 		/// </summary>
-		public new static readonly StringName Duplicate = "duplicate";
+		public new static readonly StringName Duplicate = "duplicate_region";
 		/// <summary>
 		/// Cached name for the 'dump' member.
 		/// </summary>

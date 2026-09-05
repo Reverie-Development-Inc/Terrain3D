@@ -867,9 +867,9 @@ class ListEntry extends MarginContainer:
 	func get_resource_name() -> StringName:
 		if resource:
 			if resource is Terrain3DMeshAsset:
-				return (resource as Terrain3DMeshAsset).get_name()
+				return (resource as Terrain3DMeshAsset).get_asset_name()
 			elif resource is Terrain3DTextureAsset:
-				return (resource as Terrain3DTextureAsset).get_name()
+				return (resource as Terrain3DTextureAsset).get_asset_name()
 		return ""
 
 
