@@ -1,0 +1,7 @@
+code_review:
+  disable: false
+  pull_request_opened:
+    code_review: true
+    summary: false
+    help: false
+    include_drafts: false
