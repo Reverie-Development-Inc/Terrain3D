@@ -53,6 +53,11 @@ Dictionary Terrain3DCollision::_get_shape_data(const Vector2i &p_position, const
 			}
 		}
 	}
+	// Every vertex is a hole. FLT_MAX/-FLT_MAX bounds would make an invalid heightmap shape.
+	if (min_height > max_height) {
+		LOG(EXTREME, "All vertices are holes at: ", p_position, ". Returning blank");
+		return Dictionary();
+	}
 
 	// Non rotated shape for normal array index above
 	//Transform3D xform = Transform3D(Basis(), global_pos);
@@ -333,7 +338,7 @@ void Terrain3DCollision::update(const Vector2i &p_region_loc, const bool p_rebui
 			}
 			Dictionary shape_data = _get_shape_data(shape_pos, _shape_size);
 			if (shape_data.is_empty()) {
-				LOG(EXTREME, "grid[", i, ":", grid_loc, "] shape_pos : ", shape_pos, " No region found");
+				LOG(EXTREME, "grid[", i, ":", grid_loc, "] shape_pos : ", shape_pos, " No region or all holes");
 				continue;
 			}
 			int shape_id = inactive_shape_ids.pop_back();
@@ -361,6 +366,12 @@ void Terrain3DCollision::update(const Vector2i &p_region_loc, const bool p_rebui
 			Vector2i shape_pos = region_loc * region_size;
 			Dictionary shape_data = _get_shape_data(shape_pos, region_size);
 			if (shape_data.is_empty()) {
+				const Terrain3DRegion *region = _terrain->get_data()->get_region_ptr(region_loc);
+				if (region && !region->is_deleted()) {
+					LOG(EXTREME, "Region ", region_loc, " is all holes. Disabling its shape");
+					_shape_set_disabled(i, true);
+					continue;
+				}
 				LOG(ERROR, "Can't get shape data for ", region_loc);
 				continue;
 			}
