@@ -36,6 +36,7 @@ Dictionary Terrain3DCollision::_get_shape_data(const Vector2i &p_position, const
 	map_data.resize(hshape_size * hshape_size);
 	real_t min_height = FLT_MAX;
 	real_t max_height = -FLT_MAX;
+	std::vector<uint8_t> finite(hshape_size * hshape_size, 0); // z * hshape_size + x
 
 	for (int z = 0; z < hshape_size; z++) {
 		for (int x = 0; x < hshape_size; x++) {
@@ -46,12 +47,29 @@ Dictionary Terrain3DCollision::_get_shape_data(const Vector2i &p_position, const
 			// Array Index Rotated Y=-90 - must rotate shape Y=+90 (xform below)
 			int index = hshape_size - 1 - z + x * hshape_size;
 			real_t height = data->get_modified_height(p_position + Vector2i(x, z));
-			map_data[index] = height;
-			if (!std::isnan(height)) {
+			// A non-finite height has no surface, so it becomes a hole like NaN and stays inside the bounds.
+			if (std::isfinite(height)) {
+				finite[z * hshape_size + x] = 1;
 				min_height = MIN(min_height, height);
 				max_height = MAX(max_height, height);
+			} else {
+				height = NAN;
 			}
+			map_data[index] = height;
 		}
+	}
+	// A triangle needs three finite corners, so a cell with fewer has no surface under either diagonal.
+	// Without such a cell the shape has nothing to collide with, and its bounds may be FLT_MAX/-FLT_MAX.
+	bool has_surface = false;
+	for (int z = 0; z < p_size && !has_surface; z++) {
+		for (int x = 0; x < p_size && !has_surface; x++) {
+			int i = z * hshape_size + x;
+			has_surface = finite[i] + finite[i + 1] + finite[i + hshape_size] + finite[i + hshape_size + 1] >= 3;
+		}
+	}
+	if (!has_surface) {
+		LOG(EXTREME, "No cell with a surface at: ", p_position, ". Returning blank");
+		return Dictionary();
 	}
 
 	// Non rotated shape for normal array index above
@@ -333,7 +351,7 @@ void Terrain3DCollision::update(const Vector2i &p_region_loc, const bool p_rebui
 			}
 			Dictionary shape_data = _get_shape_data(shape_pos, _shape_size);
 			if (shape_data.is_empty()) {
-				LOG(EXTREME, "grid[", i, ":", grid_loc, "] shape_pos : ", shape_pos, " No region found");
+				LOG(EXTREME, "grid[", i, ":", grid_loc, "] shape_pos : ", shape_pos, " No region or all holes");
 				continue;
 			}
 			int shape_id = inactive_shape_ids.pop_back();
@@ -350,9 +368,23 @@ void Terrain3DCollision::update(const Vector2i &p_region_loc, const bool p_rebui
 
 	} else {
 		// Full collision
-		int shape_count = _terrain->get_data()->get_region_count();
 		int region_size = _terrain->get_region_size();
 		TypedArray<Vector2i> region_locs = _terrain->get_data()->get_region_locations();
+		// Shape i serves region_locs[i] only while the list is the one build() placed. A region added or
+		// removed without update_maps() changes the count or shifts a placed shape, so rebuild now.
+		int shape_count = is_editor_mode() ? int(_shapes.size()) : PS->body_get_shape_count(_static_body_rid);
+		bool list_changed = shape_count != region_locs.size();
+		for (int i = 0; !list_changed && i < shape_count; i++) {
+			Vector3 placed = _shape_get_position(i);
+			Vector2i region_loc = region_locs[i];
+			Vector3 expected = v2iv3(region_loc * region_size + V2I(region_size / 2)) * Vector3(spacing, 1.f, spacing);
+			list_changed = placed.x < 1e20f && !placed.is_equal_approx(expected);
+		}
+		if (list_changed) {
+			LOG(DEBUG, "Region list changed since build(). Rebuilding");
+			build();
+			return;
+		}
 		for (int i = 0; i < region_locs.size(); i++) {
 			Vector2i region_loc = region_locs[i];
 			if (p_region_loc != V2I_MAX && region_loc != p_region_loc) {
@@ -361,7 +393,12 @@ void Terrain3DCollision::update(const Vector2i &p_region_loc, const bool p_rebui
 			Vector2i shape_pos = region_loc * region_size;
 			Dictionary shape_data = _get_shape_data(shape_pos, region_size);
 			if (shape_data.is_empty()) {
-				LOG(ERROR, "Can't get shape data for ", region_loc);
+				// Disable the shape so it keeps no stale data. Only a missing or deleted region is an error.
+				_shape_set_disabled(i, true);
+				const Terrain3DRegion *region = _terrain->get_data()->get_region_ptr(region_loc);
+				if (!region || region->is_deleted()) {
+					LOG(ERROR, "Can't get shape data for ", region_loc);
+				}
 				continue;
 			}
 			Transform3D xform = shape_data["xform"];
