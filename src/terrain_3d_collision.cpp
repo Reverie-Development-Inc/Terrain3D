@@ -370,11 +370,18 @@ void Terrain3DCollision::update(const Vector2i &p_region_loc, const bool p_rebui
 		// Full collision
 		int region_size = _terrain->get_region_size();
 		TypedArray<Vector2i> region_locs = _terrain->get_data()->get_region_locations();
-		// Shape i serves region_locs[i] only while the counts match. A region added or removed without
-		// update_maps() changes the list before build() runs, so rebuild now.
+		// Shape i serves region_locs[i] only while the list is the one build() placed. A region added or
+		// removed without update_maps() changes the count or shifts a placed shape, so rebuild now.
 		int shape_count = is_editor_mode() ? int(_shapes.size()) : PS->body_get_shape_count(_static_body_rid);
-		if (shape_count != region_locs.size()) {
-			LOG(DEBUG, "Shape count ", shape_count, " != region count ", region_locs.size(), ". Rebuilding");
+		bool list_changed = shape_count != region_locs.size();
+		for (int i = 0; !list_changed && i < shape_count; i++) {
+			Vector3 placed = _shape_get_position(i);
+			Vector2i region_loc = region_locs[i];
+			Vector3 expected = v2iv3(region_loc * region_size + V2I(region_size / 2)) * Vector3(spacing, 1.f, spacing);
+			list_changed = placed.x < 1e20f && !placed.is_equal_approx(expected);
+		}
+		if (list_changed) {
+			LOG(DEBUG, "Region list changed since build(). Rebuilding");
 			build();
 			return;
 		}
