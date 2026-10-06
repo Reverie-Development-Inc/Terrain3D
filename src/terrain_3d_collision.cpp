@@ -36,6 +36,7 @@ Dictionary Terrain3DCollision::_get_shape_data(const Vector2i &p_position, const
 	map_data.resize(hshape_size * hshape_size);
 	real_t min_height = FLT_MAX;
 	real_t max_height = -FLT_MAX;
+	std::vector<uint8_t> finite(hshape_size * hshape_size, 0); // z * hshape_size + x
 
 	for (int z = 0; z < hshape_size; z++) {
 		for (int x = 0; x < hshape_size; x++) {
@@ -46,16 +47,28 @@ Dictionary Terrain3DCollision::_get_shape_data(const Vector2i &p_position, const
 			// Array Index Rotated Y=-90 - must rotate shape Y=+90 (xform below)
 			int index = hshape_size - 1 - z + x * hshape_size;
 			real_t height = data->get_modified_height(p_position + Vector2i(x, z));
-			map_data[index] = height;
+			// A non-finite height has no surface, so it becomes a hole like NaN and stays inside the bounds.
 			if (std::isfinite(height)) {
+				finite[z * hshape_size + x] = 1;
 				min_height = MIN(min_height, height);
 				max_height = MAX(max_height, height);
+			} else {
+				height = NAN;
 			}
+			map_data[index] = height;
 		}
 	}
-	// No vertex has a finite height. FLT_MAX/-FLT_MAX bounds would make an invalid heightmap shape.
-	if (min_height > max_height) {
-		LOG(EXTREME, "No finite height at: ", p_position, ". Returning blank");
+	// A triangle needs three finite corners, so a cell with fewer has no surface under either diagonal.
+	// Without such a cell the shape has nothing to collide with, and its bounds may be FLT_MAX/-FLT_MAX.
+	bool has_surface = false;
+	for (int z = 0; z < p_size && !has_surface; z++) {
+		for (int x = 0; x < p_size && !has_surface; x++) {
+			int i = z * hshape_size + x;
+			has_surface = finite[i] + finite[i + 1] + finite[i + hshape_size] + finite[i + hshape_size + 1] >= 3;
+		}
+	}
+	if (!has_surface) {
+		LOG(EXTREME, "No cell with a surface at: ", p_position, ". Returning blank");
 		return Dictionary();
 	}
 
@@ -355,18 +368,20 @@ void Terrain3DCollision::update(const Vector2i &p_region_loc, const bool p_rebui
 
 	} else {
 		// Full collision
-		int shape_count = is_editor_mode() ? int(_shapes.size()) : PS->body_get_shape_count(_static_body_rid);
 		int region_size = _terrain->get_region_size();
 		TypedArray<Vector2i> region_locs = _terrain->get_data()->get_region_locations();
+		// Shape i serves region_locs[i] only while the counts match. A region added or removed without
+		// update_maps() changes the list before build() runs, so rebuild now.
+		int shape_count = is_editor_mode() ? int(_shapes.size()) : PS->body_get_shape_count(_static_body_rid);
+		if (shape_count != region_locs.size()) {
+			LOG(DEBUG, "Shape count ", shape_count, " != region count ", region_locs.size(), ". Rebuilding");
+			build();
+			return;
+		}
 		for (int i = 0; i < region_locs.size(); i++) {
 			Vector2i region_loc = region_locs[i];
 			if (p_region_loc != V2I_MAX && region_loc != p_region_loc) {
 				continue;
-			}
-			// A region added without update_maps() has no shape until build() runs.
-			if (i >= shape_count) {
-				LOG(ERROR, "No collision shape for region ", region_loc, ". Rebuild collision");
-				break;
 			}
 			Vector2i shape_pos = region_loc * region_size;
 			Dictionary shape_data = _get_shape_data(shape_pos, region_size);
