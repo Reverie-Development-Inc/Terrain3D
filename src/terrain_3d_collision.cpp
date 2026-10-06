@@ -47,15 +47,15 @@ Dictionary Terrain3DCollision::_get_shape_data(const Vector2i &p_position, const
 			int index = hshape_size - 1 - z + x * hshape_size;
 			real_t height = data->get_modified_height(p_position + Vector2i(x, z));
 			map_data[index] = height;
-			if (!std::isnan(height)) {
+			if (std::isfinite(height)) {
 				min_height = MIN(min_height, height);
 				max_height = MAX(max_height, height);
 			}
 		}
 	}
-	// Every vertex is a hole. FLT_MAX/-FLT_MAX bounds would make an invalid heightmap shape.
+	// No vertex has a finite height. FLT_MAX/-FLT_MAX bounds would make an invalid heightmap shape.
 	if (min_height > max_height) {
-		LOG(EXTREME, "All vertices are holes at: ", p_position, ". Returning blank");
+		LOG(EXTREME, "No finite height at: ", p_position, ". Returning blank");
 		return Dictionary();
 	}
 
@@ -355,7 +355,7 @@ void Terrain3DCollision::update(const Vector2i &p_region_loc, const bool p_rebui
 
 	} else {
 		// Full collision
-		int shape_count = _terrain->get_data()->get_region_count();
+		int shape_count = is_editor_mode() ? int(_shapes.size()) : PS->body_get_shape_count(_static_body_rid);
 		int region_size = _terrain->get_region_size();
 		TypedArray<Vector2i> region_locs = _terrain->get_data()->get_region_locations();
 		for (int i = 0; i < region_locs.size(); i++) {
@@ -363,16 +363,20 @@ void Terrain3DCollision::update(const Vector2i &p_region_loc, const bool p_rebui
 			if (p_region_loc != V2I_MAX && region_loc != p_region_loc) {
 				continue;
 			}
+			// A region added without update_maps() has no shape until build() runs.
+			if (i >= shape_count) {
+				LOG(ERROR, "No collision shape for region ", region_loc, ". Rebuild collision");
+				break;
+			}
 			Vector2i shape_pos = region_loc * region_size;
 			Dictionary shape_data = _get_shape_data(shape_pos, region_size);
 			if (shape_data.is_empty()) {
+				// Disable the shape so it keeps no stale data. Only a missing or deleted region is an error.
+				_shape_set_disabled(i, true);
 				const Terrain3DRegion *region = _terrain->get_data()->get_region_ptr(region_loc);
-				if (region && !region->is_deleted()) {
-					LOG(EXTREME, "Region ", region_loc, " is all holes. Disabling its shape");
-					_shape_set_disabled(i, true);
-					continue;
+				if (!region || region->is_deleted()) {
+					LOG(ERROR, "Can't get shape data for ", region_loc);
 				}
-				LOG(ERROR, "Can't get shape data for ", region_loc);
 				continue;
 			}
 			Transform3D xform = shape_data["xform"];
