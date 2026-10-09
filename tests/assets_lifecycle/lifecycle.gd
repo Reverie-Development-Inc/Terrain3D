@@ -38,6 +38,15 @@ func _retained(terrain: Node, expected: Resource, label: String) -> void:
 		_check(texture.get("albedo_color") == Color(0.2, 0.4, 0.6, 1.0), label + ": texture color changed")
 
 
+func _renderable(terrain: Node, label: String) -> void:
+	var assets: Resource = terrain.get("assets")
+	var albedo: RID = assets.call("get_albedo_array_rid")
+	var normal: RID = assets.call("get_normal_array_rid")
+	_check(albedo.is_valid(), label + ": generated albedo array was discarded")
+	_check(normal.is_valid(), label + ": generated normal array was discarded")
+	_check(not terrain.get("material").get("show_checkered"), label + ": material fell back to checkerboard")
+
+
 func _run() -> void:
 	var camera := Camera3D.new()
 	root.add_child(camera)
@@ -61,6 +70,7 @@ func _run() -> void:
 			_check(ResourceSaver.save(assets, path) == OK, "save external Assets")
 			assets.take_over_path(path)
 		root.add_child(terrain)
+		_renderable(terrain, kind + " READY")
 		if kind.begins_with("external"):
 			_check(terrain.get("assets") != assets, kind + ": external Assets were not reloaded")
 			_check(terrain.get("assets").call("get_texture_count") == 0, kind + ": READY did not clear textures")
@@ -69,6 +79,7 @@ func _run() -> void:
 			_retained(terrain, assets, kind + " READY")
 		root.remove_child(terrain)
 		root.add_child(terrain)
+		_renderable(terrain, kind + " re-entry")
 		if kind.begins_with("external"):
 			var reloaded: Resource = terrain.get("assets")
 			var texture: Resource = reloaded.call("get_texture_asset", 0)
