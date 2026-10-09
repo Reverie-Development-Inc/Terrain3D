@@ -39,7 +39,7 @@ runs:
       id: load-cache
       uses: ./.github/actions/load-cache
       with:
-        cache-name: ${{ inputs.cache-name }}
+        cache-name: ${{ inputs.cache-name }}-${{ hashFiles('gdextension/*') }}
       continue-on-error: true
 
     - name: Build Terrain3D
@@ -51,6 +51,8 @@ runs:
               platform=${{ inputs.platform }} \
               arch=${{ inputs.arch }} \
               ${{ inputs.scons-flags }} \
+              custom_api_file="${{ github.workspace }}/gdextension/extension_api.json" \
+              gdextension_dir="${{ github.workspace }}/gdextension" \
               ${{ inputs.flags }}
 
     - name: Save SCons Cache
@@ -58,7 +60,7 @@ runs:
       uses: actions/cache/save@v6
       with:
         path: ${{ github.workspace }}/.scons-cache/
-        key: ${{ inputs.cache-name }}-${{ github.ref }}
+        key: ${{ inputs.cache-name }}-${{ hashFiles('gdextension/*') }}-${{ github.ref }}
 
     - name: Rename Web Artifacts
       if: inputs.platform == 'web' && inputs.threads != ''
