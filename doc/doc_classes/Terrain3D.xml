@@ -203,7 +203,7 @@
 			Alias for [member Terrain3DMaterial.displacement_sharpness].
 		</member>
 		<member name="free_editor_textures" type="bool" setter="set_free_editor_textures" getter="get_free_editor_textures" default="true">
-			Frees ground textures used for editing in _ready(). These textures are used to generate the TextureArrays, so if you don't change any [Terrain3DTextureAsset] settings in game, this can be enabled. Also reloads the texture asset list in _enter_tree() in case you load scenes via code and need the textures again. Calls [method Terrain3DAssets.clear_textures].
+			For Assets saved as an external resource file, frees ground textures used for editing in _ready() and reloads the texture asset list in _enter_tree() in case you load scenes via code and need the textures again. These textures are used to generate the TextureArrays, so if you don't change any [Terrain3DTextureAsset] settings in game, this can be enabled. Calls [method Terrain3DAssets.clear_textures]. In-memory and embedded Assets are retained without reloading or clearing their textures.
 		</member>
 		<member name="gi_mode" type="int" setter="set_gi_mode" getter="get_gi_mode" enum="GeometryInstance3D.GIMode" default="1">
 			Tells the renderer which global illumination mode to use for the terrain mesh. This sets [code skip-lint]GeometryInstance3D.gi_mode[/code] in the engine.
