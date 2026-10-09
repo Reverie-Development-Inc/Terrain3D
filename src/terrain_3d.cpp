@@ -1177,7 +1177,7 @@ void Terrain3D::_notification(const int p_what) {
 			_setup_mouse_picking();
 			_setup_displacement_buffer();
 			// Reload editor textures - Also see READY
-			if (_free_editor_textures && !IS_EDITOR && _assets.is_valid() && !_assets->get_path().contains("Terrain3DAssets")) {
+			if (_free_editor_textures && !IS_EDITOR && _assets.is_valid() && !_assets->get_path().is_empty() && !_assets->is_built_in()) {
 				LOG(INFO, "free_editor_textures enabled, reloading Assets path: ", _assets->get_path());
 				_assets = ResourceLoader::get_singleton()->load(_assets->get_path(), "", ResourceLoader::CACHE_MODE_IGNORE);
 			}
@@ -1194,13 +1194,9 @@ void Terrain3D::_notification(const int p_what) {
 			//test_differs();
 
 			// Clear editor textures - also see ENTER_TREE
-			if (_free_editor_textures && !IS_EDITOR && _assets.is_valid()) {
-				if (_assets->get_path().contains("Terrain3DAssets")) {
-					LOG(WARN, "free_editor_textures requires `Assets` be saved to a file. Do so, or disable the former to turn off this warning");
-				} else {
-					LOG(INFO, "free_editor_textures enabled, clearing texture assets");
-					_assets->clear_textures();
-				}
+			if (_free_editor_textures && !IS_EDITOR && _assets.is_valid() && !_assets->get_path().is_empty() && !_assets->is_built_in()) {
+				LOG(INFO, "free_editor_textures enabled, clearing texture assets");
+				_assets->clear_textures();
 			}
 			break;
 		}
