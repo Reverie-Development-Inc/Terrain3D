@@ -723,7 +723,7 @@ void Terrain3DMaterial::_update_uniforms(const RID &p_material, const uint32_t p
 		}
 	}
 
-	TypedArray<Vector2i> region_locations = data->get_region_locations();
+	TypedArray<Vector2i> region_locations = data->get_region_locations_by_slot();
 	PackedVector2Array padded_locations;
 	padded_locations.resize(_max_regions);
 	for (int i = 0; i < MIN(region_locations.size(), _max_regions); ++i) {

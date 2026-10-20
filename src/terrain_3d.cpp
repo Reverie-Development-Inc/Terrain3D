@@ -57,9 +57,9 @@ void Terrain3D::_initialize() {
 		_data->connect("region_map_changed", callable_mp(this, &Terrain3D::update_region_labels));
 	}
 	// Any region was changed, regenerate collision if enabled
-	if (!_data->is_connected("region_map_changed", callable_mp(_collision, &Terrain3DCollision::build))) {
-		LOG(DEBUG, "Connecting _data::region_map_changed signal to build()");
-		_data->connect("region_map_changed", callable_mp(_collision, &Terrain3DCollision::build));
+	if (!_data->is_connected("region_map_changed", callable_mp(_collision, &Terrain3DCollision::update).bind(V2I_MAX, true))) {
+		LOG(DEBUG, "Connecting _data::region_map_changed signal to incremental collision reconciliation");
+		_data->connect("region_map_changed", callable_mp(_collision, &Terrain3DCollision::update).bind(V2I_MAX, true));
 	}
 	// Any map was regenerated or regions changed, update material uniforms without rebuilding shaders
 	if (!_data->is_connected("maps_changed", callable_mp(_material.ptr(), &Terrain3DMaterial::update).bind(Terrain3DMaterial::REGION_ARRAYS))) {
@@ -171,7 +171,9 @@ void Terrain3D::_destroy_collision(const bool p_final) {
 	if (_collision) {
 		_collision->destroy();
 	}
-	if (p_final) {
+	if (p_final && _collision && _collision->is_cleanup_deferred()) {
+		_collision = nullptr;
+	} else if (p_final) {
 		memdelete_safely(_collision);
 	}
 }

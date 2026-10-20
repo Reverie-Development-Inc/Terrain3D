@@ -3,10 +3,11 @@
 #ifndef TERRAIN3D_COLLISION_CLASS_H
 #define TERRAIN3D_COLLISION_CLASS_H
 
+#include <deque>
+
 #include <godot_cpp/classes/collision_shape3d.hpp>
 #include <godot_cpp/classes/physics_material.hpp>
 #include <godot_cpp/classes/static_body3d.hpp>
-#include <vector>
 
 #include "constants.h"
 #include "terrain_3d_util.h"
@@ -42,7 +43,85 @@ private:
 	RID _static_body_rid; // Physics Server Static Body
 	StaticBody3D *_static_body = nullptr; // Editor mode StaticBody3D
 	std::vector<CollisionShape3D *> _shapes; // All CollisionShape3Ds
+	struct ShapeSlot {
+		RID rid;
+		Vector2i position = V2I_MAX;
+		uint64_t epoch = 0;
+		bool installed = false;
+		bool enabled = false;
+	};
+	enum class JobKind {
+		NONE,
+		ALLOCATE_BODY,
+		ALLOCATE_SHAPE,
+		RECONCILE,
+		SAMPLE,
+		UPLOAD,
+		ACTIVATE,
+		DISABLE,
+		FREE_SHAPE,
+		FREE_BODY,
+	};
+	enum class RuntimeState {
+		LEGACY,
+		BUILDING,
+		READY,
+		PAUSED,
+		RETIRING,
+	};
+	struct Job {
+		JobKind kind = JobKind::NONE;
+		int slot = -1;
+		Vector2i position = V2I_MAX;
+		uint64_t epoch = 0;
+	};
 
+	RuntimeState _runtime_state = RuntimeState::LEGACY;
+	int _job_budget = 0;
+	uint64_t _epoch = 1;
+	int _allocated_slots = 0;
+	int _required_slots = 0;
+	int _grid_width = 0;
+	bool _body_attached = false;
+	bool _automatic_allowed = true;
+	bool _incremental_cleanup = false;
+	uint64_t _completed_jobs = 0;
+	uint64_t _max_job_usec = 0;
+	int _max_page_samples = 0;
+	String _last_operation = "idle";
+	Dictionary _pending_page;
+	int _pending_page_slot = -1;
+	uint64_t _pending_page_epoch = 0;
+	Transform3D _pending_page_transform;
+	Dictionary _operation_stats;
+	std::vector<ShapeSlot> _slots;
+	std::deque<Job> _jobs;
+	SceneTree *_cleanup_tree = nullptr;
+
+	bool _incremental_runtime() const;
+	bool _incremental_owned() const;
+	int _shape_count() const;
+	void _invalidate_epoch();
+	void _record_job(const String &p_operation, uint64_t p_usec, int p_page_samples = 0);
+	Dictionary _job_result(const String &p_operation, uint64_t p_usec) const;
+	void _queue(JobKind p_kind, int p_slot = -1, const Vector2i &p_position = V2I_MAX);
+	void _push_front(const Job &p_job);
+	void _clear_pending_jobs();
+	void _queue_missing_shapes();
+	void _queue_reconciliation();
+	void _queue_disable_all();
+	void _queue_retirement();
+	void _configure_runtime();
+	bool _step_one();
+	void _run_budget();
+	void _detach_body();
+	void _schedule_incremental_cleanup();
+	void _cleanup_step();
+	void _mark_slot_unused(int p_slot);
+	void _set_slot_disabled(int p_slot, bool p_disabled);
+	void _set_slot_transform(int p_slot, const Transform3D &p_transform);
+	void _set_slot_data(int p_slot, const Dictionary &p_data);
+	Dictionary _sample_shape_page(const Vector2i &p_position, int p_size, int &r_samples);
 	bool _initialized = false;
 	Vector2i _last_snapped_pos = V2I_MAX;
 
@@ -61,11 +140,17 @@ public:
 	Terrain3DCollision() {}
 	~Terrain3DCollision() { destroy(); }
 	void initialize(Terrain3D *p_terrain);
-
 	void build();
-	void reset_target_position() { _last_snapped_pos = V2I_MAX; }
+	void reset_target_position();
 	void update(const Vector2i &p_region_loc = V2I_MAX, const bool p_rebuild = false);
 	void destroy();
+	bool is_cleanup_deferred() const { return _incremental_cleanup; }
+	void set_job_budget(int p_jobs);
+	Dictionary step_job();
+	void begin_pause();
+	void resume_jobs();
+	void begin_retirement();
+	Dictionary get_job_status() const;
 
 	void set_mode(const CollisionMode p_mode);
 	CollisionMode get_mode() const { return _mode; }

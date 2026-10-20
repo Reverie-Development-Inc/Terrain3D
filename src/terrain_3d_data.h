@@ -45,8 +45,8 @@ private:
 	// Regions are dual indexed:
 	// 1) By `region_location:Vector2i` as the primary key. This is the only stable index
 	// so should be the main index for users.
-	// 2) By `region_id:int`. This index changes on every add/remove, depends on load order,
-	// and is not stable. It should not be relied on by users and is primarily for internal use.
+	// 2) By `region_id:int`. Authoring rebuilds this index; runtime residency instead
+	// keeps a stable texture slot until eviction. Neither is a persistent source ID.
 
 	// Private functions should be indexed by region_id or region_location
 	// Public functions by region_location or global_position
@@ -57,9 +57,9 @@ private:
 	Dictionary _regions; // Dict[region_location:Vector2i] -> Terrain3DRegion
 
 	// All _active_ region maps are maintained in these secondary indices.
-	// Regions are considered active if and only if they exist in `_region_locations`. The other
-	// arrays are built off of this index; its order defines region_id.
-	// The image arrays are converted to TextureArrays for the shader.
+	// Regions are active if and only if they exist in `_region_locations`.
+	// Authoring image arrays follow that list; residency image arrays are sparse,
+	// indexed by stable slot, with null entries for empty slots.
 
 	TypedArray<Vector2i> _region_locations;
 	TypedArray<Image> _height_maps;
@@ -78,10 +78,24 @@ private:
 	GeneratedTexture _generated_control_maps;
 	GeneratedTexture _generated_color_maps;
 
+	// Opt-in immutable runtime pool. Only one decoded admission and one eviction may queue.
+	int _residency_capacity = 0;
+	int _residency_allocated_maps = 0;
+	int _residency_uploaded_maps = 0;
+	int _residency_incoming_slot = -1;
+	Ref<Terrain3DRegion> _residency_incoming;
+	TypedArray<Vector2i> _residency_locations;
+	bool _residency_evict_pending = false;
+	Vector2i _residency_evict_location;
+	Error _residency_error = OK;
+	bool _residency_failed = false;
+	bool _residency_stepping = false;
+
 	// Functions
 	void _clear();
 	void _copy_paste_dfr(const Terrain3DRegion *p_src_region, const Rect2i &p_src_rect, const Rect2i &p_dst_rect, const Terrain3DRegion *p_dst_region);
 	Error _save_export_image(const MapType p_map_type, const Ref<Image> &p_img, const String &p_path, const String &p_ext) const;
+	bool _residency_has_pending() const;
 
 public:
 	Terrain3DData() {}
@@ -93,6 +107,8 @@ public:
 	int get_region_count() const { return _region_locations.size(); }
 	void set_region_locations(const TypedArray<Vector2i> &p_locations);
 	TypedArray<Vector2i> get_region_locations() const { return _region_locations; }
+	// Shader indirection needs slot order, while public active iteration stays dense.
+	TypedArray<Vector2i> get_region_locations_by_slot() const { return _residency_capacity > 0 ? _residency_locations : _region_locations; }
 	TypedArray<Terrain3DRegion> get_regions_active(const bool p_copy = false, const bool p_deep = false) const;
 	Dictionary get_regions_all() const { return _regions; }
 	PackedInt32Array get_region_map() const { return _region_map; }
@@ -125,6 +141,13 @@ public:
 	void remove_regionp(const Vector3 &p_global_position, const bool p_update = true);
 	void remove_regionl(const Vector2i &p_region_loc, const bool p_update = true);
 	void remove_region(const Ref<Terrain3DRegion> &p_region, const bool p_update = true);
+
+	// Runtime-only residency: no source mutation, dense texture rebuild, or implicit drain.
+	Error begin_residency(const int p_capacity);
+	Error residency_queue_region(const Ref<Terrain3DRegion> &p_region);
+	Error residency_queue_evict(const Vector2i &p_region_loc);
+	Dictionary residency_step();
+	Dictionary residency_status() const;
 
 	// File I/O
 	void save_directory(const String &p_dir);
@@ -233,9 +256,9 @@ inline Vector2i Terrain3DData::get_region_location(const Vector3 &p_global_posit
 // Returns id of any active region. -1 if out of bounds or no region, or region id
 inline int Terrain3DData::get_region_id(const Vector2i &p_region_loc) const {
 	int map_index = get_region_map_index(p_region_loc);
-	if (map_index >= 0) {
+	if (map_index >= 0 && map_index < _region_map.size()) {
 		int region_id = _region_map[map_index] - 1; // 0 = no region
-		if (region_id >= 0 && region_id < _region_locations.size()) {
+		if (region_id >= 0 && region_id < (_residency_capacity > 0 ? _residency_capacity : _region_locations.size())) {
 			return region_id;
 		}
 	}

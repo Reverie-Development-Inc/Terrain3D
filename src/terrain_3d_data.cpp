@@ -6,6 +6,7 @@
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/resource_saver.hpp>
+#include <godot_cpp/classes/time.hpp>
 
 #include "logger.h"
 #include "terrain_3d_data.h"
@@ -21,6 +22,19 @@ void Terrain3DData::_clear() {
 	_region_map.resize(REGION_MAP_SIZE * REGION_MAP_SIZE);
 	_regions.clear();
 	_region_locations.clear();
+	_height_maps.clear();
+	_control_maps.clear();
+	_color_maps.clear();
+	_residency_incoming.unref();
+	_residency_locations.clear();
+	_residency_capacity = 0;
+	_residency_allocated_maps = 0;
+	_residency_uploaded_maps = 0;
+	_residency_incoming_slot = -1;
+	_residency_evict_pending = false;
+	_residency_error = OK;
+	_residency_failed = false;
+	_residency_stepping = false;
 	_master_height_range = V2_ZERO;
 	_generated_height_maps.clear();
 	_generated_control_maps.clear();
@@ -103,7 +117,194 @@ void Terrain3DData::initialize(Terrain3D *p_terrain) {
 	_region_sizev = V2I(_region_size);
 }
 
+bool Terrain3DData::_residency_has_pending() const {
+	return _residency_capacity > 0 && (_residency_allocated_maps < TYPE_MAX ||
+			_residency_incoming.is_valid() || _residency_evict_pending);
+}
+
+Error Terrain3DData::begin_residency(const int p_capacity) {
+	if (!_terrain || _region_size <= 0) {
+		return ERR_UNCONFIGURED;
+	}
+	if (_residency_capacity > 0 || !_regions.is_empty() || !_region_locations.is_empty()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (p_capacity <= 0 || p_capacity > REGION_MAP_SIZE * REGION_MAP_SIZE ||
+			p_capacity > int(_terrain->get_material()->get_max_regions())) {
+		return ERR_INVALID_PARAMETER;
+	}
+	_clear();
+	_residency_capacity = p_capacity;
+	_residency_locations.resize(p_capacity);
+	_residency_locations.fill(V2I_MAX);
+	_height_maps.resize(p_capacity);
+	_control_maps.resize(p_capacity);
+	_color_maps.resize(p_capacity);
+	_region_map.fill(0);
+	_region_map_dirty = false;
+	return OK;
+}
+
+Error Terrain3DData::residency_queue_region(const Ref<Terrain3DRegion> &p_region) {
+	if (_residency_capacity == 0) {
+		return ERR_UNCONFIGURED;
+	}
+	if (_residency_failed) {
+		return _residency_error;
+	}
+	if (_residency_stepping || _residency_incoming.is_valid()) {
+		return ERR_BUSY;
+	}
+	if (p_region.is_null() || p_region->is_deleted() ||
+			p_region->get_region_size() != _region_size ||
+			get_region_map_index(p_region->get_location()) < 0) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (_regions.has(p_region->get_location())) {
+		return ERR_ALREADY_EXISTS;
+	}
+	if (get_region_count() >= _residency_capacity) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	// Reject incompatible decoded inputs rather than copying/sanitizing a second window.
+	for (int i = 0; i < TYPE_MAX; i++) {
+		Ref<Image> image = p_region->get_map(MapType(i));
+		if (image.is_null() || image->is_empty() || image->get_size() != _region_sizev ||
+				image->get_format() != Terrain3DRegion::FORMAT[i] ||
+				image->has_mipmaps() != (i == TYPE_COLOR)) {
+			return ERR_INVALID_PARAMETER;
+		}
+	}
+	for (int i = 0; i < _residency_capacity; i++) {
+		if (Vector2i(_residency_locations[i]) == V2I_MAX) {
+			_residency_incoming_slot = i;
+			break;
+		}
+	}
+	if (_residency_incoming_slot < 0) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	_residency_incoming = p_region;
+	_residency_uploaded_maps = 0;
+	return OK;
+}
+
+Error Terrain3DData::residency_queue_evict(const Vector2i &p_region_loc) {
+	if (_residency_capacity == 0) {
+		return ERR_UNCONFIGURED;
+	}
+	if (_residency_stepping || _residency_evict_pending) {
+		return ERR_BUSY;
+	}
+	if (!has_region(p_region_loc)) {
+		return ERR_DOES_NOT_EXIST;
+	}
+	_residency_evict_location = p_region_loc;
+	_residency_evict_pending = true;
+	return OK;
+}
+
+Dictionary Terrain3DData::residency_status() const {
+	Dictionary status;
+	status["capacity"] = _residency_capacity;
+	status["resident_count"] = get_region_count();
+	status["pending"] = _residency_has_pending();
+	status["held_region_count"] = _regions.size() + int(_residency_incoming.is_valid());
+	status["height_rid"] = _generated_height_maps.get_rid().get_id();
+	status["control_rid"] = _generated_control_maps.get_rid().get_id();
+	status["color_rid"] = _generated_color_maps.get_rid().get_id();
+	status["error"] = int(_residency_error);
+	status["failed"] = _residency_failed;
+	return status;
+}
+
+Dictionary Terrain3DData::residency_step() {
+	const uint64_t start = Time::get_singleton()->get_ticks_usec();
+	String operation = "idle";
+	Error error = OK;
+	if (_residency_capacity == 0) {
+		error = ERR_UNCONFIGURED;
+	} else if (_residency_stepping) {
+		error = ERR_BUSY;
+	} else {
+		_residency_stepping = true;
+		GeneratedTexture *textures[] = { &_generated_height_maps, &_generated_control_maps, &_generated_color_maps };
+		if (_residency_evict_pending) {
+			operation = "evict";
+			const Vector2i location = _residency_evict_location;
+			const int slot = get_region_id(location);
+			// Remove render indirection before allowing the slot to be reused.
+			_region_map.set(get_region_map_index(location), 0);
+			_region_locations.erase(location);
+			_regions.erase(location);
+			_height_maps[slot] = Ref<Image>();
+			_control_maps[slot] = Ref<Image>();
+			_color_maps[slot] = Ref<Image>();
+			_residency_locations[slot] = V2I_MAX;
+			_residency_evict_pending = false;
+			calc_height_range();
+			emit_signal("region_map_changed");
+			emit_signal("maps_changed");
+			emit_signal("height_maps_changed");
+		} else if (_residency_failed) {
+			operation = "failed";
+			error = _residency_error;
+		} else if (_residency_allocated_maps < TYPE_MAX) {
+			const int type = _residency_allocated_maps;
+			operation = String("allocate_") + Terrain3DRegion::TYPESTR[type];
+			Ref<Image> blank = Util::get_filled_image(_region_sizev, Terrain3DRegion::COLOR[type],
+					type == TYPE_COLOR, Terrain3DRegion::FORMAT[type]);
+			error = textures[type]->allocate_layers(_residency_capacity, blank);
+			if (error == OK) {
+				_residency_allocated_maps++;
+			}
+		} else if (_residency_incoming.is_valid()) {
+			if (_residency_uploaded_maps < TYPE_MAX) {
+				const int type = _residency_uploaded_maps;
+				operation = String("upload_") + Terrain3DRegion::TYPESTR[type];
+				error = textures[type]->update_layer(_residency_incoming->get_map(MapType(type)), _residency_incoming_slot);
+				if (error == OK) {
+					_residency_uploaded_maps++;
+				}
+			} else {
+				operation = "publish";
+				const Vector2i location = _residency_incoming->get_location();
+				const int slot = _residency_incoming_slot;
+				_regions[location] = _residency_incoming;
+				_region_locations.push_back(location);
+				_residency_locations[slot] = location;
+				_height_maps[slot] = _residency_incoming->get_height_map();
+				_control_maps[slot] = _residency_incoming->get_control_map();
+				_color_maps[slot] = _residency_incoming->get_color_map();
+				_region_map.set(get_region_map_index(location), slot + 1);
+				update_master_heights(_residency_incoming->get_height_range());
+				_residency_incoming.unref();
+				_residency_incoming_slot = -1;
+				_residency_uploaded_maps = 0;
+				emit_signal("region_map_changed");
+				emit_signal("maps_changed");
+				emit_signal("height_maps_changed");
+			}
+		}
+		if (error != OK) {
+			_residency_error = error;
+			_residency_failed = true;
+			// A failed partial upload is never published and holds no decoded resource.
+			_residency_incoming.unref();
+			_residency_incoming_slot = -1;
+			_residency_uploaded_maps = 0;
+		}
+		_residency_stepping = false;
+	}
+	Dictionary result = residency_status();
+	result["operation"] = operation;
+	result["error"] = int(error);
+	result["usec"] = Time::get_singleton()->get_ticks_usec() - start;
+	return result;
+}
+
 void Terrain3DData::set_region_locations(const TypedArray<Vector2i> &p_locations) {
+	ERR_FAIL_COND_MSG(_residency_capacity > 0, "Runtime residency owns region locations.");
 	SET_IF_DIFF(_region_locations, p_locations);
 	LOG(INFO, "Setting _region_locations with array sized: ", p_locations.size());
 	_region_map_dirty = true;
@@ -150,6 +351,7 @@ void Terrain3DData::do_for_regions(const Rect2i &p_area, const Callable &p_callb
 }
 
 void Terrain3DData::change_region_size(int p_new_size) {
+	ERR_FAIL_COND_MSG(_residency_capacity > 0, "Cannot resize a runtime residency pool.");
 	LOG(INFO, "Changing region size from: ", _region_size, " to ", p_new_size);
 	if (!is_valid_region_size(p_new_size)) {
 		LOG(ERROR, "Invalid region size: ", p_new_size, ". Must be power of 2, 64-2048");
@@ -234,6 +436,7 @@ bool Terrain3DData::is_region_modified(const Vector2i &p_region_loc) const {
 }
 
 void Terrain3DData::set_region_deleted(const Vector2i &p_region_loc, const bool p_deleted) {
+	ERR_FAIL_COND_MSG(_residency_capacity > 0, "Runtime eviction does not mark source regions deleted.");
 	Terrain3DRegion *region = get_region_ptr(p_region_loc);
 	if (!region) {
 		LOG(ERROR, "Region not found at: ", p_region_loc);
@@ -273,6 +476,7 @@ Ref<Terrain3DRegion> Terrain3DData::add_region_blank(const Vector2i &p_region_lo
  *	p_update - rebuild the maps if true. Set to false if bulk adding many regions.
  */
 Error Terrain3DData::add_region(const Ref<Terrain3DRegion> &p_region, const bool p_update) {
+	ERR_FAIL_COND_V_MSG(_residency_capacity > 0, ERR_UNAVAILABLE, "Use residency_queue_region in runtime residency mode.");
 	if (p_region.is_null()) {
 		LOG(ERROR, "Provided region is null. Returning");
 		return FAILED;
@@ -316,6 +520,7 @@ void Terrain3DData::remove_regionl(const Vector2i &p_region_loc, const bool p_up
 // Remove region marks the region for deletion, and removes it from the active arrays indexed by ID
 // It remains stored in _regions and the file remains on disk until saved, when both are removed
 void Terrain3DData::remove_region(const Ref<Terrain3DRegion> &p_region, const bool p_update) {
+	ERR_FAIL_COND_MSG(_residency_capacity > 0, "Use residency_queue_evict in runtime residency mode.");
 	if (p_region.is_null()) {
 		LOG(ERROR, "Region not found or is null. Returning");
 		return;
@@ -340,6 +545,7 @@ void Terrain3DData::remove_region(const Ref<Terrain3DRegion> &p_region, const bo
 }
 
 void Terrain3DData::save_directory(const String &p_dir) {
+	ERR_FAIL_COND_MSG(_residency_capacity > 0, "Runtime residency never saves source data.");
 	LOG(INFO, "Saving data files to ", p_dir);
 	Array locations = _regions.keys();
 	for (const Vector2i &region_loc : locations) {
@@ -352,6 +558,7 @@ void Terrain3DData::save_directory(const String &p_dir) {
 
 // You may need to do a file system scan to update FileSystem panel
 void Terrain3DData::save_region(const Vector2i &p_region_loc, const String &p_dir, const bool p_16_bit) {
+	ERR_FAIL_COND_MSG(_residency_capacity > 0, "Runtime residency never saves source data.");
 	Ref<Terrain3DRegion> region = get_region(p_region_loc);
 	if (region.is_null()) {
 		LOG(ERROR, "No region found at: ", p_region_loc);
@@ -387,6 +594,7 @@ void Terrain3DData::save_region(const Vector2i &p_region_loc, const String &p_di
 }
 
 void Terrain3DData::load_directory(const String &p_dir) {
+	ERR_FAIL_COND_MSG(_residency_capacity > 0, "Use residency_queue_region in runtime residency mode.");
 	if (p_dir.is_empty()) {
 		LOG(ERROR, "Specified directory name is blank");
 		return;
@@ -433,6 +641,7 @@ void Terrain3DData::load_directory(const String &p_dir) {
 
 //TODO have load_directory call load_region, or make a load_file that loads a specific path
 void Terrain3DData::load_region(const Vector2i &p_region_loc, const String &p_dir, const bool p_update) {
+	ERR_FAIL_COND_MSG(_residency_capacity > 0, "Use residency_queue_region in runtime residency mode.");
 	LOG(INFO, "Loading region from location ", p_region_loc);
 	String path = p_dir + String("/") + Util::location_to_filename(p_region_loc);
 	if (!FileAccess::file_exists(path)) {
@@ -481,6 +690,11 @@ TypedArray<Image> Terrain3DData::get_maps(const MapType p_map_type) const {
 }
 
 void Terrain3DData::update_maps(const MapType p_map_type, const bool p_all_regions, const bool p_generate_mipmaps) {
+	// Runtime maps are immutable between admission and eviction. In particular, incidental
+	// authoring refreshes must not free stable RIDs or reconstruct dense slot indices.
+	if (_residency_capacity > 0) {
+		return;
+	}
 	// Generate region color mipmaps
 	if (p_generate_mipmaps && (p_map_type == TYPE_COLOR || p_map_type == TYPE_MAX)) {
 		LOG(EXTREME, "Regenerating color mipmaps");
@@ -640,6 +854,7 @@ void Terrain3DData::update_maps(const MapType p_map_type, const bool p_all_regio
 }
 
 void Terrain3DData::set_pixel(const MapType p_map_type, const Vector3 &p_global_position, const Color &p_pixel) {
+	ERR_FAIL_COND_MSG(_residency_capacity > 0, "Runtime residency maps are immutable.");
 	if (p_map_type < 0 || p_map_type >= TYPE_MAX) {
 		LOG(ERROR, "Specified map type out of range");
 		return;
@@ -1350,6 +1565,11 @@ void Terrain3DData::dump(const bool verbose) const {
 ///////////////////////////
 
 void Terrain3DData::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("begin_residency", "capacity"), &Terrain3DData::begin_residency);
+	ClassDB::bind_method(D_METHOD("residency_queue_region", "region"), &Terrain3DData::residency_queue_region);
+	ClassDB::bind_method(D_METHOD("residency_queue_evict", "location"), &Terrain3DData::residency_queue_evict);
+	ClassDB::bind_method(D_METHOD("residency_step"), &Terrain3DData::residency_step);
+	ClassDB::bind_method(D_METHOD("residency_status"), &Terrain3DData::residency_status);
 	BIND_ENUM_CONSTANT(HEIGHT_FILTER_NEAREST);
 	BIND_ENUM_CONSTANT(HEIGHT_FILTER_MINIMUM);
 

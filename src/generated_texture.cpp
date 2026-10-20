@@ -22,6 +22,9 @@ void GeneratedTexture::clear() {
 	_rid = RID();
 	_dirty = true;
 	_size = 0;
+	_layer_size = Vector2i();
+	_layer_format = Image::FORMAT_MAX;
+	_layer_mipmaps = false;
 }
 
 RID GeneratedTexture::create(const TypedArray<Image> &p_layers) {
@@ -40,6 +43,42 @@ RID GeneratedTexture::create(const TypedArray<Image> &p_layers) {
 		clear();
 	}
 	return _rid;
+}
+
+// The temporary layer list repeats one blank image; empty slots retain no CPU image.
+Error GeneratedTexture::allocate_layers(const int p_capacity, const Ref<Image> &p_blank) {
+	if (_rid.is_valid()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (p_capacity <= 0 || p_blank.is_null() || p_blank->is_empty()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	TypedArray<Image> layers;
+	layers.resize(p_capacity);
+	for (int i = 0; i < p_capacity; i++) {
+		layers[i] = p_blank;
+	}
+	if (!create(layers).is_valid()) {
+		_dirty = true;
+		return ERR_CANT_CREATE;
+	}
+	_layer_size = p_blank->get_size();
+	_layer_format = p_blank->get_format();
+	_layer_mipmaps = p_blank->has_mipmaps();
+	return OK;
+}
+
+Error GeneratedTexture::update_layer(const Ref<Image> &p_image, const int p_layer) {
+	if (!_rid.is_valid()) {
+		return ERR_UNCONFIGURED;
+	}
+	if (p_layer < 0 || p_layer >= _size || p_image.is_null() || p_image->is_empty() ||
+			p_image->get_size() != _layer_size || p_image->get_format() != _layer_format ||
+			p_image->has_mipmaps() != _layer_mipmaps) {
+		return ERR_INVALID_PARAMETER;
+	}
+	update(p_image, p_layer);
+	return OK;
 }
 
 void GeneratedTexture::update(const Ref<Image> &p_image, const int p_layer) {

@@ -15,11 +15,16 @@ private:
 	Ref<Image> _image;
 	bool _dirty = false;
 	int _size = 0;
+	Vector2i _layer_size;
+	Image::Format _layer_format = Image::FORMAT_MAX;
+	bool _layer_mipmaps = false;
 
 public:
 	void clear();
 	bool is_dirty() const { return _dirty; }
 	RID create(const TypedArray<Image> &p_layers);
+	Error allocate_layers(const int p_capacity, const Ref<Image> &p_blank);
+	Error update_layer(const Ref<Image> &p_image, const int p_layer);
 	void update(const Ref<Image> &p_image, const int p_layer);
 	RID create(const Ref<Image> &p_image);
 	Ref<Image> get_image() const { return _image; }
