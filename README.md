@@ -88,7 +88,7 @@ Please see [Contributing](https://terrain3d.readthedocs.io/en/latest/docs/contri
 
 ## Editor viewport regression check
 
-Run the real editor attachment check with Godot 4.8.dev7 and a compatible built Terrain3D addon:
+Run the real editor attachment check with a standalone Linux Godot 4.8.dev7 executable and a compatible built Terrain3D addon:
 
 ```bash
 python3 tests/editor_viewport/run.py \
@@ -99,7 +99,8 @@ python3 tests/editor_viewport/run.py \
 
 The runner copies this checkout's scripts into a temporary project.
 It takes only the native libraries and extension descriptor from `--native-addon`.
-It uses private editor settings and removes the temporary project after the run.
+It uses private XDG editor settings and removes the temporary project after the run.
+It refuses self-contained editors (`_sc_` or `._sc_` beside the executable), which override those private paths.
 The probe requires the live info panel to enter the editor tree above all four 3D viewports.
 A failed initialization, missing panel, engine error, or timeout fails the check.
 

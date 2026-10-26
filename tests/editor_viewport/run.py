@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 
@@ -23,6 +24,13 @@ def main():
                         help="Built addon supplying bin/ and terrain.gdextension")
     parser.add_argument("--logs", type=Path, required=True)
     args = parser.parse_args()
+    executable = shutil.which(args.godot)
+    if executable is None:
+        parser.error("--godot must name a runnable standalone executable")
+    executable = Path(executable).resolve()
+    if sys.platform != "linux" or any(
+            (executable.parent / marker).exists() for marker in ("_sc_", "._sc_")):
+        parser.error("private XDG settings require Linux Godot without self-contained mode")
     args.logs.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="terrain-editor-", dir=args.logs) as directory:
         scratch = Path(directory)
@@ -50,7 +58,7 @@ def main():
                 (project / "project.godot").write_text(
                     config + '[editor_plugins]\nenabled=PackedStringArray('
                     '"res://addons/terrain_3d/plugin.cfg", "res://addons/probe/plugin.cfg")\n')
-            command = [args.godot, "--headless", "--editor", "--path", str(project), *options]
+            command = [str(executable), "--headless", "--editor", "--path", str(project), *options]
             try:
                 result = subprocess.run(command, env=env, stdout=subprocess.PIPE,
                                         stderr=subprocess.STDOUT, text=True, timeout=40)
