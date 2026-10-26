@@ -86,6 +86,25 @@ And the contribution team in [AUTHORS.md](https://terrain3d.readthedocs.io/en/st
 Please see [Contributing](https://terrain3d.readthedocs.io/en/latest/docs/contributing.html) if you would like to help make Terrain3D the best terrain system for Godot.
 
 
+## Editor viewport regression check
+
+Run the real editor attachment check with a standalone Linux Godot 4.8.dev7 executable and a compatible built Terrain3D addon:
+
+```bash
+python3 tests/editor_viewport/run.py \
+  --godot /path/to/godot \
+  --native-addon /path/to/built/addons/terrain_3d \
+  --logs /tmp/terrain-editor-check
+```
+
+The runner copies this checkout's scripts into a temporary project.
+It takes only the native libraries and extension descriptor from `--native-addon`.
+It uses private XDG editor settings and removes the temporary project after the run.
+It refuses self-contained editors (`_sc_` or `._sc_` beside the executable), which override those private paths.
+The probe requires the live info panel to enter the editor tree above all four 3D viewports.
+A failed initialization, missing panel, engine error, or timeout fails the check.
+
+
 ## License
 
 This addon has been released under the [MIT License](https://github.com/TokisanGames/Terrain3D/blob/main/LICENSE.txt).

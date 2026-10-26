@@ -679,11 +679,12 @@ func set_button_editor_icon(p_button: Button, p_icon_name: String) -> void:
 func setup_live_info_panel() -> void:
 	live_info_panel = load(LIVE_INFO_PANEL).instantiate()
 	live_info_panel.plugin = plugin
-	var main_screen = EditorInterface.get_editor_main_screen()
-	if not main_screen:
-		push_error("Terrain3DUI: setup_live_info_panel(): Failed to get main screen")
+	var viewport = EditorInterface.get_editor_viewport_3d(0)
+	if not viewport:
+		push_error("Terrain3DUI: setup_live_info_panel(): Failed to get 3D viewport")
 		return
-	var viewport_container = main_screen.find_child("*Node3DEditorViewportContainer*", true, false)
+	# In Godot 4.8, get_editor_main_screen() returns the legacy plugin container.
+	var viewport_container = viewport.find_parent("*Node3DEditorViewportContainer*")
 	if not viewport_container:
 		push_error("Terrain3DUI: setup_live_info_panel(): Failed to get main viewport_container")
 		return
