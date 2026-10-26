@@ -34,7 +34,7 @@ var _confirmed: bool = false
 var search_box: TextEdit
 var search_button: Button
 
-# Used only for editor, so change to single visible/hiddden
+# Used only for editor, so change to single visible/hidden
 enum {
 	HIDDEN = -1,
 	SIDEBAR = 0,

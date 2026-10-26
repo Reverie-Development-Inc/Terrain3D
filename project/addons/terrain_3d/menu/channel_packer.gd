@@ -128,7 +128,7 @@ func pack_textures_popup() -> void:
 	plugin.add_child(window)
 	_init_file_dialogs()
 	
-	# the dialog disables the parent window "on top" so, restore it after 1 frame to alow the dialog to clear.
+	# the dialog disables the parent window "on top" so, restore it after 1 frame to allow the dialog to clear.
 	var set_on_top_fn: Callable = func(_file: String = "") -> void:
 		await RenderingServer.frame_post_draw
 		window.always_on_top = true
@@ -302,7 +302,7 @@ func _init_texture_picker(p_parent: Node, p_image_index: int) -> void:
 				texture_rect.texture = ImageTexture.create_from_image(images[IMAGE_HEIGHT])
 				_set_wh_labels(IMAGE_HEIGHT, height_texture.get_width(), height_texture.get_height())
 				set_channel_fn.call(Image.USED_CHANNELS_R)
-				_show_message(INFO, "Height Texture generated sucsessfully")
+				_show_message(INFO, "Height Texture generated successfully")
 		lumin_height_button.pressed.connect(lumin_fn)
 	plugin.ui.set_button_editor_icon(file_pick_button, "Folder")
 	plugin.ui.set_button_editor_icon(clear_button, "Remove")
@@ -431,7 +431,7 @@ func _set_normal_vector(source: Image, quiet: bool = false) -> void:
 	sum -= Color(1.0, 1.0, 1.0)
 	normal_vector = Vector3(sum.r, sum.g, sum.b).normalized()
 	if normal_vector.dot(Vector3(0.0, 0.0, 1.0)) < 0.999 && !quiet:
-		_show_message(WARN, "Normal Texture Not Orthoganol to UV plane.\nFor Compatability with Detiling and Rotation, Select Orthoganolize Normals")
+		_show_message(WARN, "Normal Texture Not Orthoganol to UV plane.\nFor Compatibility with Detiling and Rotation, Select Orthoganolize Normals")
 
 
 func _align_normals(source: Image, iteration: int = 0) -> void:
